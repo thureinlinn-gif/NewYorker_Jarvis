@@ -1,36 +1,33 @@
-# New Yorker 👁️🎙️
+# New Yorker Jarvis 👁️🎙️
 
-> **Real-time, hands-free spatial AI companion that watches live video, interprets physical environments with rolling visual context, and executes agentic actions across 30+ languages.**
+> **Hands-free, voice-and-camera AI transit copilot for NYC that answers spoken questions about what you're looking at, in English or Russian, and takes action through 12 Gemini function-calling tools.**
 
-New Yorker transforms multimodal AI from passive snapshot analysis into an active, hands-free urban navigator. By combining continuous low-latency camera sampling, visual memory state tracking, natural multilingual voice feedback, and native iMessage integration, New Yorker eliminates "app fatigue" and language barriers for immigrants, tourists, and visually impaired transit riders.
+New Yorker Jarvis turns multimodal AI into a hands-free urban navigator. The phone camera samples the scene at 1.5 FPS, and every spoken question is sent to Gemini together with a live camera frame over WebSockets. Gemini answers out loud and can call tools to check a bank balance, pay a fare, plan a route, look up transit alerts, check the weather, or text an itinerary to iMessage. It's built for immigrants, tourists, and visually impaired riders who struggle with app fatigue and language barriers.
 
 ---
 
 ## 🏆 Hackathon Tracks & Sponsor Alignment
 
-New Yorker is engineered specifically to target and maximize judge scoring across the following hackathon prize tracks:
-
-| Track / Sponsor | Prize Category | How New Yorker Integrates |
+| Track / Sponsor | Prize Category | How New Yorker Jarvis Integrates |
 | :--- | :--- | :--- |
-| **Capital One** | **Best Use of Nessie** | Autonomous **Agentic Transit Budgeting & Micropayments**: Queries customer account balances via Nessie API before fare gates, automates OMNY/transit card top-ups, audits daily commuter spend against budget goals, and alerts users of fare eligibility/discounts. |
-| **Google Cloud / MLH** | **Best Use of Gemini API** | Continuous multimodal frame processing, spatial awareness, street sign/transit advisory translation, and dynamic intent extraction from live video streams. |
-| **ElevenLabs [MLH]** | **Best Use of ElevenLabs** | Streaming conversational TTS via low-latency WebSockets (<800ms end-to-end), delivering natural voice navigation in 30+ native languages (e.g., Tajik, Spanish, Japanese, English). |
-| **Photon** | **Agents in iMessage using Photon** | Dispatches real-world actions directly to the user's native Messages app using the **Photon Spectrum SDK**—sending formatted turn-by-turn route guides, subway detour warnings, and offline cards as native blue bubbles. |
-| **MongoDB [MLH]** | **Best Use of MongoDB Atlas** | Stores rolling visual session memory, vector embeddings for localized transit points-of-interest (POIs), station maps, and cached real-time MTA alerts with Atlas Vector Search. |
-| **DigitalOcean [MLH]** | **Best Use of DigitalOcean** | Production hosting of the FastAPI visual state engine and WebSocket stream orchestrator via DigitalOcean App Platform & Droplet compute. |
-| **.Tech Domains [MLH]** | **Best .Tech Domain Name** | Configured and live under `livelens.tech` for the web app frontend and API gateway. |
-| **Cursor** | **Best Use of Cursor** | Built end to end in Cursor: agent-driven implementation of the streaming WebSocket pipeline, Gemini tool definitions, and the React HUD, with live on-device debugging of latency and iPad audio routing. |
-| **SpaceX** | **Best Real-Time Systems Engineering** | A hard latency budget treated like flight software: continuous camera telemetry, a rolling visual state machine, and a sub-second perception-to-voice loop with graceful degradation when any upstream service stalls. |
+| **Capital One** | **Best Use of Nessie** | **Agentic transit payments:** checks account balances, makes deposits, and pays turnstile fares through the Nessie API via Gemini tool calls. |
+| **Google Cloud / MLH** | **Best Use of Gemini API** | Multimodal understanding of a live camera frame plus the user's spoken question, with 12 function-calling tools for actions. |
+| **ElevenLabs [MLH]** | **Best Use of ElevenLabs** | Text-to-speech (`eleven_flash_v2_5`) that reads Jarvis's answers aloud in the user's language. |
+| **Photon** | **Agents in iMessage using Photon** | Sends formatted route guides and transit warnings to the user's native Messages app using the **Photon Spectrum SDK**. |
+| **DigitalOcean [MLH]** | **Best Use of DigitalOcean** | Hosting of the FastAPI backend and WebSocket orchestrator. |
+| **.Tech Domains [MLH]** | **Best .Tech Domain Name** | `livelens.tech` domain for the web app and API. |
+| **Cursor** | **Best Use of Cursor** | Built end to end in Cursor: the WebSocket pipeline, Gemini tool definitions, and the React HUD, with on-device debugging of iPad audio routing. |
+| **SpaceX** | **Best Real-Time Systems Engineering** | Continuous camera sampling, a rolling visual state machine, and graceful degradation (timeouts and fallbacks) when an upstream service stalls. |
 
 ---
 
 ## 🎯 The Problem & Value Proposition
 
-- **App Fatigue in the Wild:** Modern transit apps require constant typing, reading, and switching between mapping, translation, and transit agency apps.
-- **Multimodal Gap:** Standard LLM wrappers only handle single photo uploads. They lack a **rolling visual state**—failing to remember that you just passed the turnstile when you look down at a platform sign 15 seconds later.
-- **Accessibility & Language Barriers:** Over 25 million non-English proficient citizens and millions of visually impaired travelers face confusing, printed detour notices, broken escalator signs, and complex transit hubs daily.
+- **App Fatigue in the Wild:** Transit apps require constant typing, reading, and switching between mapping, translation, and transit agency apps.
+- **Multimodal Gap:** Standard LLM wrappers handle single photo uploads with no memory. They don't keep a **rolling visual context** across questions.
+- **Accessibility & Language Barriers:** Non-English speakers and visually impaired travelers face confusing printed detour notices and complex transit hubs every day.
 
-**New Yorker bridges this gap:** Point your camera, speak naturally in any language, hear instant directional audio in your ear, and get actionable offline itineraries texted straight to your iMessage.
+**New Yorker Jarvis bridges this gap:** point your camera, ask a question in English or Russian, hear the answer, and get the itinerary texted to your iMessage.
 
 ---
 
@@ -38,9 +35,26 @@ New Yorker is engineered specifically to target and maximize judge scoring acros
 
 | Stage | User Action | System Perception & Tool Execution | Output & User Experience |
 | :--- | :--- | :--- | :--- |
-| **1. Intent & Language Trigger** | User speaks native language (e.g., Tajik) while pointing phone at a subway entrance. | **Gemini API** extracts spatial intent (*navigate to Columbia University*) and identifies the station entrance from live video feed. | **ElevenLabs** streams audio in natural Tajik in <800ms: *"Ин даромадгоҳи қатори 1 мебошад. Ба поён фуроед ва аломатҳои сурхро пайгирӣ кунед."* |
-| **2. Contextual Orientation** | User points camera at platform signs, track numbers, or paper detour printouts. | **FastAPI State Engine** compares frames against rolling visual memory; queries **MongoDB Atlas** for station layout and live MTA service disruptions. | Live audio confirms correct platform positioning and announces incoming train ETA while warning of weekend track reroutes. |
-| **3. Real-World Action** | User asks: *"Text me the full transfer guide so I don't lose my way."* | **Photon Spectrum SDK** receives structured itinerary payload from agent tool call and dispatches an interactive route card. | User/Judge instantly receives a formatted **blue-bubble iMessage** notification on their phone for offline reference. |
+| **1. Ask by Voice** | User points the phone at a subway entrance and asks, in English or Russian, how to get to Columbia University. | The question and the current camera frame go over a WebSocket to FastAPI, which calls **Gemini** to identify the entrance and the user's intent. | **ElevenLabs** reads the answer aloud in the user's language, and `set_navigation_route` shows the route on the map. |
+| **2. Check Conditions** | User asks about delays on the 1 train or the weather. | Gemini calls `lookup_transit_alerts` (stored in **Supabase**) or `get_weather_forecast` (Open-Meteo). | Jarvis speaks the alerts or forecast and shows an action card. |
+| **3. Pay & Send** | User asks to pay the fare, then: *"Text me the full transfer guide."* | Gemini calls `pay_with_card` (**Nessie**), then `dispatch_imessage_itinerary` (**Photon**). | The fare payment is confirmed, and a formatted **iMessage** arrives on the user's phone. |
+
+---
+
+## 🧰 Gemini Function-Calling Tools (12)
+
+Defined in [`backend/app/agents/tools.py`](backend/app/agents/tools.py) and passed to Gemini as `TOOL_FUNCTIONS`.
+
+| Category | Tools |
+| :--- | :--- |
+| **Payments (Capital One Nessie)** | `check_bank_balance`, `deposit_money`, `pay_with_card` |
+| **Routing & Map** | `set_navigation_route`, `close_navigation_map` |
+| **Transit Alerts** | `lookup_transit_alerts` |
+| **Weather (Open-Meteo)** | `get_weather_forecast` |
+| **Messaging (Photon iMessage)** | `dispatch_imessage_itinerary` |
+| **Trip Plan HUD** | `update_mission_plan`, `clear_mission_plan`, `hide_mission_plan`, `show_mission_plan` |
+
+> Without API keys, the Nessie and Photon services return simulated responses, so the demo still runs.
 
 ---
 
@@ -48,25 +62,26 @@ New Yorker is engineered specifically to target and maximize judge scoring acros
 
 ```text
                          ┌──────────────────────────────────────────────┐
-                         │      React + Vite Frontend (SPA + PWA)       │
-                         │   • Camera Video Streamer (WebRTC/Canvas)    │
-                         │   • Audio Capture & Streaming Player         │
+                         │        React + Vite + TypeScript Frontend    │
+                         │   • Camera frame sampler (Canvas, 1.5 FPS)   │
+                         │   • Speech recognition (English / Russian)   │
+                         │   • Audio player, map & action cards         │
                          └──────────────────────┬───────────────────────┘
                                                 │
                                        WebSockets / REST
                                                 │
                                                 ▼
                          ┌──────────────────────────────────────────────┐
-                         │      FastAPI Visual State Orchestrator       │
-                         │   • Rolling Visual Context Buffer            │
-                         │   • Multimodal Prompt & Tool Pipeline        │
+                         │          FastAPI Orchestrator                │
+                         │   • Rolling visual context & state machine   │
+                         │   • Gemini prompt + 12-tool dispatch         │
                          └──────┬──────────────┬──────────────┬─────────┘
                                 │              │              │
     ┌───────────────────────────┴───┐    ┌─────┴──────────┐   └───────────────────────────┐
     ▼                               ▼    ▼                ▼                               ▼
-Gemini API                     ElevenLabs  MongoDB Atlas    Photon SDK              DigitalOcean
-Multimodal Vision & Intent    Streaming   Atlas Vector     Native iMessage Agent   App Platform /
-(Low-latency Video Frames)     TTS Voice  Search & POIs    Itinerary Dispatch      Droplet Hosting
+Gemini API                     ElevenLabs  Supabase         Photon SDK              Nessie API /
+Vision + Function Calling      TTS Voice   Transit Alerts   iMessage Dispatch       Open-Meteo
+                                           & Sessions                               Weather
 ```
 
 ---
@@ -75,51 +90,61 @@ Multimodal Vision & Intent    Streaming   Atlas Vector     Native iMessage Agent
 
 | Layer | Choice | Purpose |
 | :--- | :--- | :--- |
-| **Frontend** | React (Vite) + TypeScript + Tailwind CSS | Responsive mobile camera view, real-time audio visualizer, low-latency WebSocket client |
-| **Backend** | Python 3.12+ & FastAPI | Async orchestrator managing video frame ingestion, LLM tool dispatch, and streaming voice pipes |
-| **Vision & Reasoning** | Google Gemini API (`gemini-2.0-flash` / `gemini-1.5-pro`) | Real-time multimodal understanding, OCR on transit signage, language detection, and agentic tool calls |
-| **Voice & Speech** | ElevenLabs Streaming WebSocket API | Sub-second ultra-low latency voice synthesis in 30+ world languages |
-| **Financial Agent** | Capital One Nessie API | Proactive fare budgeting, automated OMNY transit reload checks, and account balance verification before turnstiles |
-| **Messaging Agent** | Photon Spectrum SDK | Direct dispatch of rich transit cards and route guides to native iOS iMessage |
-| **Database & Vector Search**| MongoDB Atlas | Visual session memory persistence, transit alert embeddings, and station POI search |
-| **Cloud Hosting** | DigitalOcean | Production deployment of FastAPI container and static React build |
-| **Domain** | Namecheap / MLH .Tech | `livelens.tech` custom domain setup |
+| **Frontend** | React (Vite) + TypeScript + Tailwind CSS | Mobile camera view, speech input, audio playback, map, and WebSocket client |
+| **Backend** | Python 3.12+ & FastAPI | Async orchestrator handling frame ingestion, Gemini calls, and tool dispatch |
+| **Vision & Reasoning** | Google Gemini API (model set by `GEMINI_MODEL`) | Multimodal understanding of camera frames and function calling |
+| **Speech Input** | Web Speech API (browser) | Voice recognition in English (`en-US`) and Russian (`ru-RU`), switched by voice |
+| **Voice Output** | ElevenLabs | Text-to-speech for spoken answers |
+| **Financial Agent** | Capital One Nessie API | Balance checks, deposits, and turnstile fare payments |
+| **Messaging Agent** | Photon Spectrum SDK | Route guides sent to native iOS iMessage |
+| **Database** | Supabase | Transit alerts and session checkpoints |
+| **Weather** | Open-Meteo API | Hourly forecasts by location |
+| **Maps & Routing** | Leaflet + OpenStreetMap, Transitous, OSRM | Map display, transit routes, and driving routes |
+| **Cloud Hosting** | DigitalOcean | Deployment of the FastAPI container and React build |
+| **Domain** | MLH .Tech | `livelens.tech` |
 
 ---
 
 ## 📂 Repo Layout
 
 ```text
-NewYorker/
+NewYorker_Jarvis/
 ├── README.md               # Project documentation & hackathon submission brief
 ├── docker-compose.yml      # Local orchestration for dev/testing
-├── backend/                # FastAPI Visual State & Agent Service
+├── backend/                # FastAPI orchestrator & agent service
 │   ├── app/
-│   │   ├── main.py         # FastAPI application entry & WebSocket routes
+│   │   ├── main.py         # FastAPI entry & WebSocket route (/ws/stream/{session_id})
 │   │   ├── config.py       # Pydantic environment settings
 │   │   ├── agents/
-│   │   │   ├── orchestrator.py # Rolling visual state engine & loop
-│   │   │   └── tools.py        # Gemini tool calling (iMessage, MTA, POIs)
+│   │   │   ├── orchestrator.py # Rolling visual context, state machine & tool loop
+│   │   │   └── tools.py        # The 12 Gemini function-calling tools
 │   │   ├── services/
-│   │   │   ├── gemini.py       # Gemini API client (Vision + Multimodal)
-│   │   │   ├── elevenlabs.py   # ElevenLabs WebSocket streaming TTS
-│   │   │   ├── nessie.py       # Capital One Nessie API client (Balances & Transfers)
-│   │   │   ├── photon.py       # Photon SDK iMessage dispatcher
-│   │   │   └── mongo.py        # MongoDB Atlas client & vector retrieval
+│   │   │   ├── gemini.py           # Gemini API client (vision + function calling)
+│   │   │   ├── elevenlabs.py       # ElevenLabs text-to-speech
+│   │   │   ├── nessie.py           # Capital One Nessie client (balance, deposit, fare)
+│   │   │   ├── photon.py           # Photon iMessage dispatcher
+│   │   │   ├── weather.py          # Open-Meteo weather forecasts
+│   │   │   ├── supabase_service.py # Supabase client (transit alerts, sessions)
+│   │   │   └── mongo.py            # Optional MongoDB client (not used by default)
 │   │   └── models/
-│   │       └── schemas.py      # Pydantic schemas (Frames, Session, Messages)
+│   │       └── schemas.py      # Pydantic schemas (frames, session, messages)
 │   ├── pyproject.toml      # Python dependencies (managed via uv)
 │   └── Dockerfile
-└── frontend/               # React + Vite Mobile-First Web Application
+└── frontend/               # React + Vite mobile-first web app
     ├── src/
     │   ├── components/
-    │   │   ├── CameraView.tsx  # Live video capture & canvas frame sampler
-    │   │   ├── AudioStream.tsx # Real-time ElevenLabs audio playback
-    │   │   ├── Transcript.tsx  # Live bilingual subtitle overlay
-    │   │   └── ActionCard.tsx  # Visual confirmation of iMessage triggers
+    │   │   ├── CameraView.tsx    # Live video capture
+    │   │   ├── MapView.tsx       # Navigation map
+    │   │   ├── PlanDashboard.tsx # Trip plan HUD
+    │   │   ├── ActionCard.tsx    # Tool result cards (payments, iMessage, weather)
+    │   │   ├── Transcript.tsx    # Live subtitle overlay
+    │   │   └── JarvisOrb.tsx     # Speaking/listening indicator
     │   ├── hooks/
-    │   │   └── useLiveLens.ts  # Dual WebSocket connection management
-    │   ├── App.tsx             # Main layout & controls
+    │   │   ├── useLiveLens.ts    # WebSocket connection & 1.5 FPS frame sampling
+    │   │   ├── useCamera.ts      # Camera access
+    │   │   └── useAudioPlayer.ts # Audio playback
+    │   ├── config/env.ts         # Frontend configuration
+    │   ├── App.tsx               # Main layout, speech input & controls
     │   └── main.tsx
     ├── package.json
     ├── vite.config.ts
@@ -146,6 +171,7 @@ Create a `.env` file in `backend/` containing:
 ```env
 # Gemini API (Google AI Studio)
 GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash
 
 # ElevenLabs
 ELEVENLABS_API_KEY=your_elevenlabs_api_key
@@ -158,9 +184,9 @@ NESSIE_CUSTOMER_ID=your_nessie_customer_id
 # Photon Spectrum (iMessage Agent)
 PHOTON_API_KEY=your_photon_api_key
 
-# MongoDB Atlas
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/?retryWrites=true&w=majority
-MONGODB_DATABASE=livelens
+# Supabase
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
 # Environment
 ENVIRONMENT=development
@@ -174,8 +200,8 @@ PORT=8000
 Detailed setup guides:
 - [Backend Setup Guide](docs/guides/backend-setup.md) — Python 3.12, `uv`, WebSockets, and Docker
 - [Frontend Setup Guide](docs/guides/frontend-setup.md) — React, Vite, camera streaming, and mobile HTTPS testing
-- [Sponsor APIs & Credentials Guide](docs/guides/sponsor-integrations-setup.md) — Gemini, ElevenLabs, Nessie, Photon, MongoDB Atlas, and DigitalOcean
-- [Full Technical Architecture](docs/architecture.md) — System design, sequence diagram, and latency budget
+- [Sponsor APIs & Credentials Guide](docs/guides/sponsor-integrations-setup.md) — Gemini, ElevenLabs, Nessie, Photon, and DigitalOcean
+- [Full Technical Architecture](docs/architecture.md) — System design and sequence diagram
 - [Product Brief & Demo Script](docs/project-brief.md) — 3-minute live judging script
 
 ### 1. Backend Setup (FastAPI)
@@ -214,6 +240,12 @@ Frontend runs at `http://localhost:5173`.
 
 ## 🌟 Judge Rubric Highlights
 
-- **Live Stage "Wow" Factor:** No static slides or mockups. A working live demonstration with live phone camera feed, real-time spatial vision translation in another language, and an instant audible voice response in <800ms.
-- **Real-World Accessibility Impact:** Provides immediate utility for immigrants, tourists, and visually impaired individuals navigating foreign transit networks with confusing paper signage.
-- **Deep Sponsor Cohesion:** Every sponsor technology occupies a vital role in the pipeline (Gemini = eyes & brain, ElevenLabs = voice, MongoDB Atlas = spatial memory, Photon = native iMessage actions, DigitalOcean = hosting).
+- **Live Stage "Wow" Factor:** No static slides or mockups. A working live demo with a phone camera feed, spoken questions in English or Russian, and spoken answers.
+- **Real-World Accessibility Impact:** Immediate utility for immigrants, tourists, and visually impaired people navigating unfamiliar transit networks with confusing paper signage.
+- **Deep Sponsor Cohesion:** Every sponsor technology has a role in the pipeline (Gemini = eyes & brain, ElevenLabs = voice, Nessie = payments, Photon = iMessage actions, DigitalOcean = hosting).
+
+---
+
+## 👥 Team
+
+Built by **Thu Rein Linn** and **Abdumalik** using pair programming: one person wrote the code (driver) while the other reviewed it and planned the next steps (navigator), and we swapped roles every hour.

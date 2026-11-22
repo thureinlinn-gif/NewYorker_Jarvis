@@ -8,12 +8,15 @@ This file is the single source of truth for any coding agent (Claude Code, Curso
 
 - **Backend:** Python 3.12+ + FastAPI (async event loop, WebSockets via `uvicorn`)
 - **Frontend:** Vite + React SPA + TypeScript + Tailwind CSS (mobile-first, WebRTC/Canvas video capture, Web Audio API playback)
-- **Vision & Multimodal Reasoning:** Google Gemini API (`gemini-2.0-flash` for low-latency multimodal video understanding & tool calling)
-- **Voice & Speech Synthesis:** ElevenLabs Streaming WebSocket TTS (sub-800ms multilingual voice in 30+ native languages)
-- **Agentic Financial Infrastructure:** Capital One Nessie API (turnstile balance verification, automated fare reload, transit budget tracking)
-- **Messaging Delivery Agent:** Photon Spectrum SDK (rich native iOS Apple iMessage blue-bubble dispatch)
-- **Database & Retrieval:** MongoDB Atlas (rolling visual session buffer, station POI vector search, MTA detour/service alert RAG)
-- **Hosting & Infrastructure:** DigitalOcean (App Platform & Droplet compute in NYC)
+- **Vision & Multimodal Reasoning:** Google Gemini API via `google-genai` (model set by `GEMINI_MODEL`), with 12 function-calling tools
+- **Speech Input:** Browser Web Speech API (English `en-US` / Russian `ru-RU`, switched by voice)
+- **Voice Synthesis:** ElevenLabs text-to-speech (REST, `eleven_flash_v2_5`), sent to the client as base64 MP3 over the WebSocket
+- **Agentic Financial Infrastructure:** Capital One Nessie API (balance checks, deposits, turnstile fare payments)
+- **Messaging Delivery Agent:** Photon Spectrum SDK (native iOS iMessage dispatch)
+- **Database:** Supabase (transit alerts, session checkpoints). MongoDB is an optional, unused fallback.
+- **Maps & Routing:** Leaflet + OpenStreetMap, routes from Transitous (transit) and OSRM (driving)
+- **Weather:** Open-Meteo API
+- **Hosting & Infrastructure:** DigitalOcean
 - **Domain:** `livelens.tech`
 
 The stack is locked for this hackathon build. Do not propose or introduce alternative frameworks or major libraries without an explicit requirement and stated rationale.
@@ -23,7 +26,7 @@ The stack is locked for this hackathon build. Do not propose or introduce altern
 ## Repo Layout
 
 ```text
-LiveLens/
+NewYorker_Jarvis/
 ├── AGENTS.md               # this file (root agent instructions)
 ├── README.md               # project overview & sponsor alignment
 ├── docker-compose.yml      # local multi-container testing
@@ -41,15 +44,15 @@ LiveLens/
 │   │   ├── main.py         # FastAPI application entry & WebSocket router
 │   │   ├── config.py       # Pydantic Settings (single source of truth for env)
 │   │   ├── agents/         # Orchestrator & Gemini function tool definitions
-│   │   ├── services/       # Integrations: gemini, elevenlabs, nessie, photon, mongo
+│   │   ├── services/       # Integrations: gemini, elevenlabs, nessie, photon, weather, supabase (mongo optional)
 │   │   └── models/         # Pydantic schemas (frames, session state, payloads)
 │   ├── pyproject.toml      # Dependency management via uv
 │   └── Dockerfile
 └── frontend/               # React + Vite mobile PWA
     ├── AGENTS.md           # frontend-specific agent instructions
     ├── src/
-    │   ├── components/     # CameraView, AudioStream, Transcript, ActionCard
-    │   ├── hooks/          # useLiveLens dual WebSocket lifecycle hook
+    │   ├── components/     # CameraView, MapView, PlanDashboard, ActionCard, Transcript, StatusBar
+    │   ├── hooks/          # useLiveLens (WebSocket + 1.5 FPS frame sampling), useCamera, useAudioPlayer
     │   ├── config/env.ts   # Frontend configuration & env validation
     │   ├── App.tsx
     │   └── main.tsx
@@ -64,7 +67,7 @@ LiveLens/
 **Default: write it yourself. Reach for a library only when the alternative is non-trivial, error-prone, or reinvention of a standard.** Every added dependency is a liability—increasing bundle size, latency, and failure surface during live judging.
 
 ### OK to depend on:
-- Hard platform guarantees and protocols: ASGI servers (`uvicorn`), HTTP/WebSocket clients (`httpx`, `websockets`), official provider SDKs (`google-genai`, `motor` / `pymongo`).
+- Hard platform guarantees and protocols: ASGI servers (`uvicorn`), HTTP/WebSocket clients (`httpx`, `websockets`), official provider SDKs (`google-genai`, `supabase`).
 - Declared core stack: FastAPI, Pydantic, React, Vite, Tailwind CSS.
 
 ### Not OK:
@@ -74,7 +77,7 @@ LiveLens/
 
 Before adding a runtime dependency, confirm:
 1. What does it solve that cannot be written in <30 lines of clean, readable code?
-2. Does it negatively impact the <800ms end-to-end latency budget?
+2. Does it add noticeable latency to the question-to-answer loop?
 3. What is its transitive footprint?
 
 ---
@@ -94,9 +97,9 @@ Before adding a runtime dependency, confirm:
 
 - **Small, Obvious Functions:** A clear 15-line async function beats an over-engineered abstract class.
 - **Async-First Execution:** Never run blocking synchronous I/O on the FastAPI main event loop. Always use `asyncio` or run blocking calls in `asyncio.to_thread`.
-- **Low-Latency Streaming Pipeline:**
-  - Token-to-speech chunking: Feed text tokens from Gemini into the ElevenLabs WebSocket stream **immediately** as they arrive. Do not buffer the entire sentence before starting audio synthesis.
-  - Binary framing: Stream raw audio PCM and compressed JPEG frames cleanly over WebSockets without redundant base64 decoding loops where possible.
+- **Low-Latency Pipeline:**
+  - Send the text answer and action cards to the client first, then the ElevenLabs audio, so the UI never waits on speech synthesis.
+  - Keep camera frames small (downscaled to 640px wide, JPEG) and avoid redundant base64 encode/decode steps.
 - **No Premature Abstraction:** Do not build generic multi-agent orchestrator frameworks when direct, typed tool definitions are faster and more reliable.
 - **Defensive Boundary Validation:** Validate rigorously at ingress boundaries (incoming WebSocket payloads, external API responses). Trust internal types.
 - **Comments:** Document *why* a particular latency optimization or workaround exists, never restate what the code trivially does.
@@ -108,7 +111,7 @@ Before adding a runtime dependency, confirm:
 Do not implement complex features in a single unreviewed shot. All non-trivial features should follow this phased cadence:
 
 1. **Plan & Document:** Define the feature scope and data contract in `docs/plans/<feature-name>.md`.
-2. **Phase 1: Schemas & Contracts:** Define Pydantic models, MongoDB collections, and typed WebSocket event messages.
+2. **Phase 1: Schemas & Contracts:** Define Pydantic models, Supabase tables, and typed WebSocket event messages.
 3. **Phase 2: Service & Tool Integration:** Implement backend logic (e.g., Nessie balance checker, Photon dispatcher, Gemini tool call handler) with curl/unit verification.
 4. **Phase 3: Frontend Client & Streaming HUD:** Wire the React camera canvas, audio player, and visual indicators.
-5. **Phase 4: Live End-to-End Validation:** Verify complete loop on physical mobile device over HTTPS/tunnel to confirm sub-800ms latency.
+5. **Phase 4: Live End-to-End Validation:** Verify complete loop on physical mobile device over HTTPS/tunnel to confirm the voice-to-answer loop feels responsive.

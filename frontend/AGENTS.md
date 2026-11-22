@@ -1,6 +1,6 @@
 # Frontend — Agent Instructions
 
-This is the mobile-first React + Vite application for **LiveLens**. Read [../AGENTS.md](../AGENTS.md) first — universal repo rules and conventions live there. This file defines frontend-specific patterns, audio/video pipelines, and UI architecture.
+This is the mobile-first React + Vite application for **New Yorker Jarvis**. Read [../AGENTS.md](../AGENTS.md) first — universal repo rules and conventions live there. This file defines frontend-specific patterns, audio/video pipelines, and UI architecture.
 
 ---
 
@@ -9,10 +9,11 @@ This is the mobile-first React + Vite application for **LiveLens**. Read [../AGE
 - **Framework:** React 18+ (Vite SPA) + TypeScript
 - **Styling:** Tailwind CSS (mobile-first, dark mode, high-contrast urban HUD)
 - **Icons:** `lucide-react` (lightweight icon set)
-- **Video Capture:** WebRTC `MediaDevices.getUserMedia` + HTML5 Offscreen `<canvas>` frame sampler
-- **Audio Recording:** Web Audio API (`MediaStreamAudioSourceNode` / `AudioWorklet` or script processor)
-- **Audio Synthesis Playback:** Web Audio API `AudioContext` with linear PCM streaming buffer
-- **Real-Time Transport:** Native browser `WebSocket` with automatic reconnection and ping/pong keepalive
+- **Video Capture:** `MediaDevices.getUserMedia` + off-screen `<canvas>` frame sampler (1.5 FPS, 640px wide JPEG)
+- **Speech Input:** Browser Web Speech API (`en-US` / `ru-RU`, switched by saying e.g. "switch to Russian")
+- **Audio Playback:** Web Audio API `AudioContext` decoding base64 MP3 from ElevenLabs
+- **Maps:** Leaflet + OpenStreetMap tiles, routes from Transitous (transit) and OSRM (driving)
+- **Real-Time Transport:** Native browser `WebSocket` with automatic 2-second reconnection
 - **Package Manager:** `pnpm` (or `npm`)
 
 ---
@@ -23,16 +24,20 @@ This is the mobile-first React + Vite application for **LiveLens**. Read [../AGE
 frontend/
 ├── src/
 │   ├── components/
-│   │   ├── CameraView.tsx      # Video viewfinder + offscreen frame sampler canvas
-│   │   ├── AudioStream.tsx     # Web Audio API streaming playback visualizer
-│   │   ├── Transcript.tsx      # Live bilingual subtitle HUD overlay
-│   │   ├── ActionCard.tsx      # Interactive cards for iMessage triggers & Nessie balance
-│   │   ├── LanguagePicker.tsx  # Quick language selector (Tajik, Spanish, Uzbek, etc.)
-│   │   └── StatusBar.tsx       # Latency monitor (<800ms indicator) & connection badge
+│   │   ├── CameraView.tsx      # Video viewfinder
+│   │   ├── MapView.tsx         # Leaflet navigation map
+│   │   ├── PlanDashboard.tsx   # Trip plan HUD (mission plan tools)
+│   │   ├── ChatPanel.tsx       # Conversation history
+│   │   ├── Transcript.tsx      # Live subtitle HUD overlay
+│   │   ├── ActionCard.tsx      # Tool result cards (Nessie, iMessage, weather)
+│   │   ├── JarvisOrb.tsx       # Speaking/listening indicator
+│   │   ├── LandingPage.tsx     # Landing screen
+│   │   ├── HealthPage.tsx      # Backend health check page
+│   │   └── StatusBar.tsx       # Latency readout & connection badge
 │   ├── hooks/
-│   │   ├── useLiveLens.ts      # Core streaming hook: WebSockets, frame loops, audio queue
+│   │   ├── useLiveLens.ts      # Core hook: WebSocket, frame capture, 1.5 FPS sampling loop
 │   │   ├── useCamera.ts        # Camera permission, facingMode, and media stream lifecycle
-│   │   └── useAudioPlayer.ts   # Web Audio API buffer scheduling & gapless playback
+│   │   └── useAudioPlayer.ts   # Web Audio API playback of ElevenLabs audio
 │   ├── config/
 │   │   └── env.ts              # Single source of truth for frontend environment variables
 │   ├── types/
@@ -57,7 +62,7 @@ See universal policy in [../AGENTS.md](../AGENTS.md). Frontend-specific:
   - Use native `fetch()` instead of `axios`.
   - Use native `WebSocket` instead of Socket.io client.
   - Use native `navigator.mediaDevices.getUserMedia` for video/audio ingest.
-  - Use native `AudioContext` for real-time PCM playback.
+  - Use native `AudioContext` for audio playback.
 - **No heavy state management libraries:** React hooks (`useState`, `useRef`, `useCallback`) and `useContext` are sufficient. Avoid Redux, MobX, or Zustand unless explicit state complexity warrants it.
 - **No heavy utility libraries:** Do not install `lodash`, `moment.js`, or `ramda`. Write clean native ES6+ TypeScript.
 
@@ -67,12 +72,12 @@ See universal policy in [../AGENTS.md](../AGENTS.md). Frontend-specific:
 
 - `src/config/env.ts` is the **single source of truth** for client variables.
 - Never scatter `import.meta.env` calls throughout individual UI components.
-- Validate environment variables at boot and fail gracefully with an on-screen toast if missing:
+- API and WebSocket URLs default to the page's own origin, so one tunnel (e.g. ngrok) serves the app, API and WebSocket through the Vite proxy:
   ```typescript
   // src/config/env.ts
   export const env = {
-    API_URL: import.meta.env.VITE_API_URL || "http://localhost:8000",
-    WS_URL: import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws/stream",
+    API_URL: import.meta.env.VITE_API_URL || origin,
+    WS_URL: import.meta.env.VITE_WS_URL || `${origin.replace(/^http/, "ws")}/ws/stream`,
     FRAME_RATE_FPS: Number(import.meta.env.VITE_FRAME_RATE_FPS) || 1.5,
     IMAGE_QUALITY: Number(import.meta.env.VITE_IMAGE_QUALITY) || 0.8,
   };
@@ -82,13 +87,14 @@ See universal policy in [../AGENTS.md](../AGENTS.md). Frontend-specific:
 
 ## Real-Time Audio & Video Streaming Rules
 
-1. **Adaptive Frame Sampling:**
-   - Never send continuous 60fps raw video frames over WebSockets.
-   - Use an off-screen `<canvas>` to grab frames at **1.0 to 2.0 FPS** at reasonable resolution (e.g. 720p compressed as JPEG quality `0.8`). This preserves OCR clarity for MTA signs while keeping network usage under 100 KB/s.
-2. **Gapless Audio Playback:**
-   - ElevenLabs yields small streaming chunks. Use `AudioContext.createBufferSource()` and schedule chunks on an incrementally advancing timestamp (`nextStartTime = Math.max(audioContext.currentTime, nextStartTime) + buffer.duration`).
-   - Clean up audio nodes on unmount to prevent browser memory leaks.
-3. **Mobile Viewport & Camera Permissions:**
+1. **Frame Sampling:**
+   - Never send continuous full-rate video over WebSockets.
+   - Grab frames with an off-screen `<canvas>` at **1.5 FPS**, downscaled to 640px wide JPEG. Each spoken question is sent with the current frame.
+2. **One Turn at a Time:**
+   - Only one question is in flight at once, so replies and audio never overlap. A 15-second timeout releases a stuck turn.
+3. **Audio Playback:**
+   - Play the base64 MP3 from each `audio_chunk` message through `AudioContext`. Clean up audio nodes on unmount.
+4. **Mobile Viewport & Camera Permissions:**
    - Default camera constraint: `{ video: { facingMode: { ideal: "environment" } } }` (back camera for pointing at signs).
    - Gracefully prompt users if camera or microphone permissions are blocked.
 
@@ -99,7 +105,7 @@ See universal policy in [../AGENTS.md](../AGENTS.md). Frontend-specific:
 - **High-Contrast, Sunlight-Readable:** Dark semi-transparent overlays (`bg-black/60 backdrop-blur-md`) with crisp white/yellow text for high visibility in dark subway stations and bright outdoor sunlight.
 - **Minimalist Hands-Free Interface:** Keep viewports uncluttered. The live video feed is the hero background; subtitles, status indicators, and action cards float unobtrusively.
 - **Live Latency & Action Feedback:**
-  - Display a live sub-second latency pill (`<800ms`) showing active copilot health.
+  - Show the measured response latency and connection status in the `StatusBar`.
   - When a tool executes (e.g., iMessage sent or Nessie balance checked), render an animated toast card with instant visual confirmation.
 
 ---

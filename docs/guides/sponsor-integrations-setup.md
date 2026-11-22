@@ -1,6 +1,6 @@
 # Sponsor Integrations & API Setup Guide
 
-This guide details how to obtain, configure, and verify all sponsor credentials and API keys used in **LiveLens**.
+This guide details how to obtain, configure, and verify all sponsor credentials and API keys used in **New Yorker Jarvis**.
 
 ---
 
@@ -9,11 +9,11 @@ This guide details how to obtain, configure, and verify all sponsor credentials 
 ### Obtaining Credentials
 1. Go to [Google AI Studio](https://aistudio.google.com/).
 2. Click **Get API key** and create a key in your project.
-3. LiveLens uses `gemini-2.0-flash` for low-latency multimodal video and tool calls.
+3. Set the model with `GEMINI_MODEL` in `backend/.env` (`.env.example` uses `gemini-2.0-flash`). It handles camera frames and the 12 function-calling tools.
 
 ### Verification
 ```bash
-curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+curl "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent?key=$GEMINI_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"contents":[{"parts":[{"text":"Explain transit fare in one sentence."}]}]}'
 ```
@@ -32,7 +32,7 @@ curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:g
 curl -X POST "https://api.elevenlabs.io/v1/text-to-speech/$ELEVENLABS_VOICE_ID" \
   -H "xi-api-key: $ELEVENLABS_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"text": "LiveLens system check complete.", "model_id": "eleven_multilingual_v2"}' \
+  -d '{"text": "New Yorker Jarvis system check complete.", "model_id": "eleven_flash_v2_5"}' \
   --output test_voice.mp3
 ```
 
@@ -77,22 +77,22 @@ curl -X POST "https://api.photon.codes/v1/imessage/send" \
   -H "Content-Type: application/json" \
   -d '{
     "to": "+1XXXXXXXXXX",
-    "text": "LiveLens Test: Route to Columbia University via 1 Train."
+    "text": "New Yorker Jarvis Test: Route to Columbia University via 1 Train."
   }'
 ```
 
 ---
 
-## 5. MongoDB Atlas (Best Use of MongoDB Atlas [MLH])
+## 5. Supabase (Transit Alerts & Sessions)
 
-### Cluster & Vector Search Setup
-1. Create a free M0 cluster on [MongoDB Atlas](https://www.mongodb.com/cloud/atlas).
-2. Under **Database Access**, create a database user with read/write privileges.
-3. Under **Network Access**, add `0.0.0.0/0` (allow access from anywhere for hackathon development).
-4. Create database `livelens` and collections:
-   - `sessions`: Rolling visual state snapshots and commute history.
-   - `stations`: Subway station vector embeddings (using Atlas Vector Search index on field `embedding`).
-   - `alerts`: Active MTA service disruption advisories.
+### Project Setup
+1. Create a free project on [Supabase](https://supabase.com/).
+2. Under **Project Settings → API**, copy the project URL and service role key into `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+3. Create two tables:
+   - `livelens_transit_alerts`: MTA service alerts, with a `line` column (e.g. `1`). Read by the `lookup_transit_alerts` tool.
+   - `livelens_sessions`: Session checkpoints written by the orchestrator.
+
+> Weather uses [Open-Meteo](https://open-meteo.com/), which needs no API key.
 
 ---
 

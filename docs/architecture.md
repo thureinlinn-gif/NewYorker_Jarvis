@@ -1,18 +1,18 @@
-# LiveLens Technical Architecture
+# New Yorker Jarvis Technical Architecture
 
-This document provides a comprehensive technical breakdown of the **LiveLens** spatial AI engine, detailing system design principles, data flow pipelines, multimodal state management, sponsor integrations, latency budgets, and deployment topology.
+This document describes how **New Yorker Jarvis** works: system design, data flow, visual state management, sponsor integrations, and deployment.
 
 ---
 
 ## 1. System Vision & Architecture Philosophy
 
-LiveLens is designed as a **real-time spatial streaming copilot**. Unlike standard conversational LLM applications that rely on request-response turn-taking and single photo uploads, LiveLens operates on **continuous perceptual streaming**:
+New Yorker Jarvis is a **hands-free voice-and-camera transit copilot**. Instead of uploading single photos to a chatbot, the user points the phone camera and asks questions out loud:
 
-1. **Sub-Second Feedback Loop (<800ms):** Users navigating fast-paced transit environments (such as subway stations and street crossings) cannot wait 4–5 seconds for an LLM response. Visual understanding and voice synthesis must stream continuously.
-2. **Rolling Visual Memory (Temporal Context):** Real-world navigation requires sequence awareness:
-   $$\text{Street Entrance} \longrightarrow \text{Turnstile} \longrightarrow \text{Mezzanine} \longrightarrow \text{Platform} \longrightarrow \text{Train Carriage}$$
-   Treating each frame as an isolated snapshot causes hallucination and disorientation. LiveLens preserves a rolling short-term visual state buffer.
-3. **Hands-Free Ambient Multimodality:** Audio in, video in, natural multilingual speech out, and asynchronous native notifications (iMessage) dispatched automatically via agentic tool calling.
+1. **Voice + Vision per Question:** Every spoken question is sent to Gemini together with the current camera frame, so answers are grounded in what the user is looking at.
+2. **Rolling Visual Memory (Temporal Context):** Navigation is sequential:
+   $$\text{Street Entrance} \longrightarrow \text{Mezzanine} \longrightarrow \text{Turnstile} \longrightarrow \text{Platform} \longrightarrow \text{Train Boarded}$$
+   The backend tracks this with a spatial state machine (`TransitLocationState`) and a rolling memory of the last 10 entries.
+3. **Agentic Actions:** Gemini can call 12 tools to pay fares, plan routes, look up alerts, check weather, update a trip plan, or text an itinerary to iMessage.
 
 ---
 
@@ -20,48 +20,34 @@ LiveLens is designed as a **real-time spatial streaming copilot**. Unlike standa
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────┐
-│                           CLIENT TIER (React + Vite SPA)                       │
+│                       CLIENT TIER (React + Vite + TypeScript)                  │
 │                                                                                │
 │   ┌─────────────────────┐   ┌──────────────────────┐   ┌───────────────────┐   │
-│   │ Video Camera Stream │   │  Microphone Ingest   │   │  Audio Playback   │   │
-│   │ (MediaStream API)   │   │ (AudioWorklet / PCM) │   │ (Web Audio Node)  │   │
+│   │ Camera Frame Sampler│   │ Speech Recognition   │   │  Audio Playback   │   │
+│   │ (Canvas, 1.5 FPS)   │   │ (Web Speech, en/ru)  │   │ (Web Audio, MP3)  │   │
 │   └──────────┬──────────┘   └──────────┬───────────┘   └─────────▲─────────┘   │
 └──────────────┼─────────────────────────┼─────────────────────────┼─────────────┘
-               │ Base64/JPEG (1-2 FPS)   │ PCM Audio (16kHz)       │ Audio Chunks
+               │ base64 JPEG + question text (JSON)                │ base64 MP3
                ▼                         ▼                         │
 ┌──────────────────────────────────────────────────────────────────┴─────────────┐
-│                    BACKEND ORCHESTRATION (FastAPI on DigitalOcean)             │
+│                       BACKEND ORCHESTRATION (FastAPI)                          │
 │                                                                                │
 │   ┌────────────────────────────────────────────────────────────────────────┐   │
-│   │                      WebSocket Session Router                          │   │
-│   │             (/ws/session/{session_id}/stream)                          │   │
+│   │              WebSocket Route  /ws/stream/{session_id}                  │   │
 │   └──────────┬─────────────────────────┬─────────────────────────┬─────────┘   │
-│              │                         │                         │             │
 │              ▼                         ▼                         ▼             │
 │   ┌─────────────────────┐   ┌──────────────────────┐   ┌───────────────────┐   │
-│   │ Rolling Visual State│   │  Spatial Reasoning   │   │ Voice Streamer    │   │
-│   │ Memory Buffer (FIFO)│   │  & Agent Controller  │   │ (Chunk Multiplex) │   │
-│   └──────────┬──────────┘   └──────────┬───────────┘   └─────────▲─────────┘   │
-└──────────────┼─────────────────────────┼─────────────────────────┼─────────────┘
-               │                         │                         │
-       Vector Context & Alert            │ Tool Calls & Prompts    │ Streamed
-       Lookups                           │                         │ Text Chunks
-               │                         ▼                         │
-┌──────────────┴──────────┐   ┌──────────────────────┐   ┌─────────┴─────────┐
-│      MongoDB Atlas      │   │    Google Gemini     │   │    ElevenLabs     │
-│   • Transit Alerts RAG  │   │  (gemini-2.0-flash)  │   │  (WebSocket TTS)  │
-│   • Visual State Vector │   │  • Vision & OCR      │   │  • 30+ Languages  │
-│   • Station POI Index   │   │  • Intent Reasoning  │   │  • Sub-800ms Voice│
-│                         │   │  • Tool Execution    │   │                   │
-└─────────────────────────┘   └──────────┬───────────┘   └───────────────────┘
-                                         │
-                                         │ Dispatches structured itinerary
-                                         ▼
-                              ┌──────────────────────┐
-                              │  Photon Spectrum SDK │
-                              │  Native iMessage iOS │
-                              │  Blue-Bubble Alerts  │
-                              └──────────────────────┘
+│   │ Rolling Visual      │   │ Gemini Prompt &      │   │ Text-to-Speech    │   │
+│   │ Memory + State Mach.│   │ 12-Tool Dispatcher   │   │ (after answer)    │   │
+│   └─────────────────────┘   └──────────┬───────────┘   └─────────┬─────────┘   │
+└────────────────────────────────────────┼─────────────────────────┼─────────────┘
+                                         │                         │
+                ┌────────────────────────┼──────────────┐          ▼
+                ▼              ▼         ▼        ▼     ▼   ┌───────────────────┐
+           Google Gemini   Nessie    Photon   Supabase Open │    ElevenLabs     │
+           (vision +       (balance, (iMessage)(alerts, Meteo│ (eleven_flash_   │
+           function calls) payments)          sessions)(weather) v2_5, REST)   │
+                                                            └───────────────────┘
 ```
 
 ---
@@ -70,145 +56,106 @@ LiveLens is designed as a **real-time spatial streaming copilot**. Unlike standa
 
 ### 3.1 Client Layer: React + Vite + TypeScript (Mobile-First)
 
-The frontend is engineered as a zero-friction, progressive web app optimized for mobile viewports (iOS Safari and Android Chrome):
-
-- **Camera Pipeline:** Uses the `MediaDevices.getUserMedia()` API targeting the back camera (`facingMode: "environment"`). An off-screen HTML5 `<canvas>` samples frames adaptively at 1–2 FPS in JPEG format (85% compression) to minimize network overhead while preserving OCR readability.
-- **Audio Worklet Engine:** Records voice activity (VAD) and streams raw 16kHz PCM audio buffers over the persistent WebSocket connection.
-- **Audio Synthesis Player:** Receives raw binary audio chunks streamed directly from the backend, decoding on the fly using the Web Audio API (`AudioContext`) with jitter-buffer protection.
-- **Overlay HUD:** Renders bilingual live subtitles, transit indicators (route icons, direction arrows), and instant action cards showing dispatched iMessage alerts.
+- **Camera Pipeline:** `getUserMedia()` with the back camera (`facingMode: "environment"`). An off-screen `<canvas>` downscales frames to 640px wide and encodes them as JPEG. In live mode, frames are sampled at **1.5 FPS** (`VITE_FRAME_RATE_FPS`).
+- **Speech Input:** The browser Web Speech API recognizes **English (`en-US`) or Russian (`ru-RU`)**. The user switches language by voice (e.g. "switch to Russian").
+- **One Turn at a Time:** Only one question is in flight at once; a 15-second timeout releases a stuck turn.
+- **Audio Playback:** Plays the base64 MP3 from each `audio_chunk` message via the Web Audio API.
+- **HUD:** Map (Leaflet + OpenStreetMap, routes from Transitous and OSRM), trip plan dashboard, action cards, transcript, and a status bar with latency and connection state.
 
 ### 3.2 Backend Orchestrator: FastAPI & Python 3.12
 
-FastAPI provides an asynchronous, high-throughput gateway deployed via `uvicorn` and `uvloop`:
-
-- **WebSocket Connection Multiplexer:** Handles bidirectional streaming of video frames, speech audio, and command events per active user session.
-- **Rolling Visual State Buffer:** Maintains the last $N$ visual checkpoints in an in-memory ring buffer (timestamp, detected objects, recognized text/signs, and spatial orientation).
-- **Agentic Tool Dispatcher:** Evaluates Gemini function calls to trigger downstream services (MTA alert lookup, station POI vector search, and Photon iMessage delivery).
+- **WebSocket Route (`/ws/stream/{session_id}`):** Receives `frame` messages (image, optional text, language) and `ping` messages; replies with `copilot_response`, `audio_chunk`, and `pong`.
+- **Passive vs. Question Frames:** Frames without text are passive and do **not** call Gemini. Frames with text call Gemini with the frame, the question, rolling context and the tools.
+- **Rolling Visual Memory:** `deque(maxlen=10)` plus the `TransitLocationState` machine (`STREET_ENTRANCE`, `MEZZANINE`, `TURNSTILE`, `PLATFORM`, `TRAIN_BOARDED`).
+- **Agentic Tool Dispatcher:** `execute_tool` in `tools.py` runs Gemini's function calls and returns results as action cards.
+- **Graceful Degradation:** Gemini calls are bounded by `GEMINI_TIMEOUT_SECONDS`; a spoken question always gets a reply, even if Gemini fails.
 
 ---
 
-## 4. Deep-Dive: Sponsor Integrations & Execution
+## 4. Integrations
 
-### 4.1 Gemini API (Multimodal Vision & Real-Time Intent)
+### 4.1 Gemini API (Multimodal Vision & Function Calling)
 *Track: Best Use of Gemini API [MLH]*
 
-LiveLens leverages **Gemini 2.0 Flash / Gemini 1.5 Pro** via Google's high-speed API:
-- **Multimodal Video Input:** Ingests live sampled frames interleaved with user audio transcription or text prompts.
-- **Signage OCR & Scene Semantic Extraction:** Identifies hard-to-read paper notices, track numbers, and transit maps in low-light subway stations.
-- **Dynamic Tool Calling:** Emits structured function calls when user intent requires action:
-  ```json
-  {
-    "name": "dispatch_imessage_itinerary",
-    "description": "Send turn-by-turn subway directions and warning details to the user's phone via iMessage",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "destination": { "type": "string" },
-        "transit_line": { "type": "string" },
-        "platform_direction": { "type": "string" },
-        "detour_warnings": { "type": "string" },
-        "step_instructions": {
-          "type": "array",
-          "items": { "type": "string" }
-        }
-      },
-      "required": ["destination", "transit_line", "step_instructions"]
-    }
-  }
-  ```
+- **Model:** set by `GEMINI_MODEL` (see `backend/.env.example` and `backend/app/config.py`).
+- **Multimodal Input:** One camera frame + the user's question + rolling context per request (`generate_content`).
+- **12 Function-Calling Tools** (`backend/app/agents/tools.py`):
 
-### 4.2 ElevenLabs (Sub-800ms Multilingual Voice Pipe)
+| Category | Tools |
+| :--- | :--- |
+| Payments (Nessie) | `check_bank_balance`, `deposit_money`, `pay_with_card` |
+| Routing & Map | `set_navigation_route`, `close_navigation_map` |
+| Transit Alerts (Supabase) | `lookup_transit_alerts` |
+| Weather (Open-Meteo) | `get_weather_forecast` |
+| Messaging (Photon) | `dispatch_imessage_itinerary` |
+| Trip Plan HUD | `update_mission_plan`, `clear_mission_plan`, `hide_mission_plan`, `show_mission_plan` |
+
+### 4.2 ElevenLabs (Voice Output)
 *Track: Best Use of ElevenLabs [MLH]*
 
-- **Bidirectional Streaming WebSockets:** Rather than waiting for full LLM responses, LiveLens streams Gemini text tokens into the ElevenLabs WebSocket endpoint (`wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream-input`).
-- **Language Adaptability:** Supports over 30 languages (including Tajik, Uzbek, Spanish, Mandarin, French, Arabic, and English) using ElevenLabs Multilingual models with natural local inflections and prosody.
-- **Low First-Byte Latency:** Delivers initial synthesized audio buffers within ~250–350ms of text emission, enabling an end-to-end user experience of under 800ms.
+- After the text answer is sent, the backend calls the ElevenLabs text-to-speech REST API (`eleven_flash_v2_5`, `optimize_streaming_latency=3`) and sends the MP3 to the client as base64 over the WebSocket.
+- `/api/tts?text=...` returns MP3 directly for quick testing.
 
-### 4.3 Photon Spectrum SDK (Native iMessage Agent)
+### 4.3 Photon Spectrum SDK (iMessage)
 *Track: Agents in iMessage using Photon [Photon]*
 
-- **Zero App Switching:** While the user's hands are busy holding bags or subway railings, they don't need to switch apps to save directions.
-- **Rich iOS Messages Dispatch:** The agent tool triggers the Photon Spectrum API to dispatch a native blue-bubble iMessage containing:
-  1. Route summary and step-by-step guidance.
-  2. Platform and track reminders.
-  3. Offline fallback cards for when subterranean cellular connection drops.
+- `dispatch_imessage_itinerary` sends the destination, transit line, steps and any warning as an iMessage.
+- Without `PHOTON_API_KEY`, the dispatch is simulated so the demo still runs.
 
-### 4.4 Capital One Nessie API (Autonomous Transit Budgeting Agent)
+### 4.4 Capital One Nessie API (Transit Payments)
 *Track: Best Use of Nessie [Capital One]*
 
-LiveLens embeds a proactive financial copilot agent powered by the **Capital One Nessie API**:
-- **Turnstile Balance Verification:** As the user approaches an OMNY or subway turnstile (detected via Gemini's visual state engine), the agent queries the customer's checking/prepaid account balance (`GET /accounts/{id}`).
-- **Smart Fare Reload & Transfer Optimization:** If the balance is insufficient for the upcoming fare ($2.90 for standard NYC transit), the agent triggers an automated micro-transfer (`POST /accounts/{id}/transfers`) or alerts the commuter before they reach the gate.
-- **Commuter Budget Tracking:** Aggregates daily urban transport expenditures, automatically categorizing fares and notifying the commuter via voice and iMessage if they qualify for fare-capping or fare discounts.
+- **Balance:** `check_bank_balance` reads the account and computes a live net balance from deposits and purchases (the Nessie sandbox doesn't update `balance` itself).
+- **Deposit & Fare Payment:** `deposit_money` and `pay_with_card` (default merchant: MTA turnstile, $2.90 fare).
+- Without `NESSIE_API_KEY`, results are simulated.
 
-### 4.5 MongoDB Atlas (Vector Search & Visual State Store)
-*Track: Best Use of MongoDB Atlas [MLH]*
+### 4.5 Supabase (Transit Alerts & Sessions)
 
-- **Atlas Vector Search:** Station maps, exit configurations, and historical transit signage are vectorized and indexed.
-- **Dynamic RAG Pipeline:** When Gemini detects a station name (e.g., "116 St - Columbia University"), the backend performs a vector search against MongoDB Atlas to retrieve current elevator status, platform layouts, and verified transfer paths.
-- **Session Audit & Memory:** Stores the rolling session logs and detected scene metadata in a `sessions` collection for continuity across navigation handoffs.
+- `lookup_transit_alerts` reads the `livelens_transit_alerts` table by line.
+- Session checkpoints are saved to `livelens_sessions`.
 
-### 4.6 DigitalOcean (Scalable Cloud Infrastructure)
+### 4.6 Open-Meteo (Weather)
+
+- `get_weather_forecast` geocodes the location and returns an hourly forecast. No API key needed.
+
+### 4.7 DigitalOcean (Hosting)
 *Track: Best Use of DigitalOcean [MLH]*
 
-- **DigitalOcean App Platform / Droplets:** Hosts the containerized FastAPI backend with automatic HTTPS termination and persistent WebSocket connections.
-- **Predictable Latency:** Deployed in the NYC region (`nyc3`) adjacent to East Coast transit infrastructure and low-latency API hops.
+- Hosts the containerized FastAPI backend (`backend/Dockerfile`).
 
 ---
 
-## 5. Sequence Diagram: Real-Time Stream & Tool Execution
+## 5. Sequence Diagram: Question & Tool Execution
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User (Tajik Speaker)
-    participant Client as React Client (Camera + Mic)
+    actor User
+    participant Client as React Client (Camera + Speech)
     participant Server as FastAPI Orchestrator
-    participant Mongo as MongoDB Atlas (RAG / Cache)
-    participant Gemini as Gemini 2.0 API (Multimodal)
-    participant Eleven as ElevenLabs (Streaming TTS)
-    participant Photon as Photon SDK (iMessage)
+    participant Gemini as Gemini API
+    participant Tool as Tool Service (Nessie / Photon / Supabase / Open-Meteo)
+    participant Eleven as ElevenLabs TTS
 
-    User->>Client: Speaks Tajik ("Ба Колумбия чӣ тавр равам?") + Points Camera
-    Client->>Server: WebSocket Stream: Frame (JPEG) + Audio (PCM)
-    Server->>Mongo: Query station POIs & active weekend service alerts
-    Mongo-->>Server: Return: "1 Train active; Uptown platform via stairs A"
-    Server->>Gemini: Stream Frame + Context + User Audio transcript
-    Note over Gemini: Analyzes visual entrance sign & extracts navigation intent
-    
-    par Stream Spoken Audio
-        Gemini-->>Server: Token Stream: "Ин даромадгоҳи қатори 1 аст..."
-        Server->>Eleven: Stream text tokens to WebSocket
-        Eleven-->>Server: Stream binary audio PCM chunks
-        Server-->>Client: Forward audio chunks
-        Client-->>User: Plays natural voice guidance (<800ms)
-    and Trigger Agentic Action
-        Gemini->>Server: Tool Call: dispatch_imessage_itinerary(...)
-        Server->>Photon: Dispatch formatted route card via Photon API
-        Photon-->>User: Native blue-bubble iMessage arrives on iPhone
+    User->>Client: Asks "How do I get to Columbia?" while pointing camera
+    Client->>Server: WebSocket frame message (JPEG + text + language)
+    Server->>Gemini: Frame + question + rolling context + 12 tools
+    Gemini-->>Server: Answer text and/or tool calls
+    opt Tool call
+        Server->>Tool: execute_tool(name, args)
+        Tool-->>Server: Result
     end
+    Server-->>Client: copilot_response (text + action cards)
+    Server->>Eleven: Text-to-speech request
+    Eleven-->>Server: MP3 audio
+    Server-->>Client: audio_chunk (base64 MP3)
+    Client-->>User: Plays spoken answer, shows map / cards
 ```
 
 ---
 
-## 6. Latency Budget Analysis
+## 6. Security & Privacy
 
-To achieve a true "copilot" sensation, the system operates under a strict **800ms target budget** from speech completion to first audio playback:
-
-| Stage | Component | Typical Latency | Notes & Optimization |
-| :--- | :--- | :--- | :--- |
-| 1. Frame & Audio Sampling | Client Canvas & AudioWorklet | 40ms | Hardware-accelerated Canvas 2D capture |
-| 2. Network Ingest | WebSocket to DigitalOcean NYC | 35ms | Binary WebSocket framing |
-| 3. Transit Context Lookup | MongoDB Atlas Vector Search | 45ms | Indexed in-region query |
-| 4. Multimodal Reasoning | Gemini 2.0 Flash | 320ms | Flash model token generation |
-| 5. Speech Synthesis (TTFB) | ElevenLabs WebSocket TTS | 220ms | Streaming input chunking |
-| 6. Audio Playback Ingestion | Client Web Audio API | 50ms | Immediate buffer queuing |
-| **Total End-to-End** | **LiveLens Pipeline** | **~710ms** | **Comfortably under the 800ms threshold** |
-
----
-
-## 7. Security, Privacy & Edge Safeguards
-
-1. **Transient Video Buffers:** Raw video frames are processed in-memory in a FIFO buffer and are not written to persistent disk storage, safeguarding commuter privacy.
-2. **Ephemeral Session Tokens:** All WebSocket connections require temporary signed session tokens generated on initial handshakes.
-3. **Graceful Subterranean Degradation:** If cellular connectivity drops underground, the last known visual state and route instructions are already committed to the user's native iMessage through Photon for offline survival.
+1. **Transient Frames:** Camera frames are processed in memory and never written to disk.
+2. **Secrets in Config Only:** All API keys come from `backend/.env` via `config.py` and are never committed.
+3. **Graceful Degradation:** Missing keys or failed APIs return simulated or fallback results instead of breaking the session.

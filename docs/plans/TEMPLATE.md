@@ -17,7 +17,7 @@ Briefly describe what this feature achieves, why it is needed, and which hackath
 
 ### Phase 1: Models & Schemas
 - [ ] Define Pydantic request/response schemas in `backend/app/models/`
-- [ ] Define MongoDB Atlas collection schema or vector index requirements
+- [ ] Define Supabase table schema (if the feature stores data)
 - [ ] *Quality Gate:* Verify schemas with mock data
 
 ### Phase 2: Backend Logic & External Service Integration
@@ -33,7 +33,7 @@ Briefly describe what this feature achieves, why it is needed, and which hackath
 
 ### Phase 4: End-to-End Validation
 - [ ] Test on mobile device via HTTPS tunnel
-- [ ] Verify latency stays within the <800ms budget
+- [ ] Verify the question-to-answer loop still feels responsive
 
 ---
 
